@@ -8,10 +8,15 @@ import tempfile
 import os
 from collections import Counter
 import requests
+from dotenv import load_dotenv
+
+# ================= LOAD ENV =================
+load_dotenv()
 
 # ================= CONFIG =================
-MODEL_PATH = "/home/mohamed_mahmoud/asl-ecosystem/artifacts/tflite/model.tflite"
-LABEL_MAP_PATH = "/home/mohamed_mahmoud/asl-ecosystem/artifacts/tflite/sign_to_prediction_index_map.json"
+MODEL_PATH = "model.tflite"
+LABEL_MAP_PATH = "sign_to_prediction_index_map.json"
+
 FIXED_FRAMES = 30
 N_LANDMARKS = 543
 CONFIDENCE_HARD_FLOOR = 0.45
@@ -107,7 +112,7 @@ def extract_landmarks(results):
 def call_llm_api(prompt):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return "Missing GROQ_API_KEY"
+        return "GROQ_API_KEY not found"
 
     try:
         r = requests.post(
@@ -119,16 +124,23 @@ def call_llm_api(prompt):
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": [
-                    {"role": "system",
-                     "content": "Rewrite sign language glosses into one natural English sentence."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "Convert the following sign language gloss words into one simple natural English sentence. Only output the sentence."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
                 ],
                 "temperature": 0.2
             },
             timeout=20
         )
+
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
+
     except Exception as e:
         return f"LLM Error: {str(e)}"
 
@@ -137,7 +149,6 @@ def call_llm_api(prompt):
 async def predict_video(file: UploadFile = File(...)):
 
     try:
-        # حفظ الفيديو مؤقتاً
         temp = tempfile.NamedTemporaryFile(delete=False)
         temp.write(await file.read())
         temp.close()
@@ -189,7 +200,6 @@ async def predict_video(file: UploadFile = File(...)):
 
                 out = interpreter.get_tensor(output_index)
 
-                # تأمين شكل الإخراج
                 if out.ndim == 2:
                     logits = out[0]
                 elif out.ndim == 1:
@@ -225,3 +235,4 @@ async def predict_video(file: UploadFile = File(...)):
 
     except Exception as e:
         return {"error": str(e)}
+print("API KEY:", os.getenv("GROQ_API_KEY"))
